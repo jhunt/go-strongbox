@@ -78,7 +78,7 @@ func main() {
 
 	args := os.Args[1:]
 	for len(args) > 0 {
-		if args[0] == "-h" || args[0] == "--bind" || args[0] == "help" {
+		if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 			usage("", 0)
 		}
 
@@ -155,8 +155,8 @@ func main() {
 		for len(raw) > 0 {
 			var b *pem.Block
 			b, raw = pem.Decode(raw)
-			if b.Type != "CERTIFICATE" {
-				continue
+			if b == nil || b.Type != "CERTIFICATE" {
+				break
 			}
 
 			ca, err := x509.ParseCertificate(b.Bytes)
