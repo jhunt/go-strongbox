@@ -1,0 +1,21 @@
+---
+meta:
+  name:   strongbox
+  target: sw
+  url:    https://ci.starkandwayne.com
+
+  initial_version: 0.0.1
+
+  aws:
+    access_key: (( vault "secret/aws/cfcommunity:access" ))
+    secret_key: (( vault "secret/aws/cfcommunity:secret" ))
+
+  github:
+    owner:        jhunt
+    repo:         go-strongbox
+    private_key:  (( vault "secret/pipelines/strongbox/github:private" ))
+    access_token: (( vault "secret/pipelines/strongbox/github:token" ))
+
+  slack:
+    webhook: (( vault "secret/pipelines/strongbox/slack:webhook" ))
+    channel: '#vault'
