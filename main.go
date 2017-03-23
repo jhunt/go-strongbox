@@ -1,16 +1,16 @@
 package main
 
 import (
-	"regexp"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"strings"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/jhunt/go-cli"
 )
@@ -71,17 +71,17 @@ func usage(prefix string, exit int) {
 }
 
 var options = struct {
-	Help bool `cli:"-h, --help"`
-	Version bool `cli:"-v, --version"`
-	Bind string `cli:"-b, --bind"`
-	Consul string `cli:"-c, --consul"`
-	CACert string `cli:"-C, --ca-certificate, --ca-cert"`
-	SkipVerify bool `cli:"-N, --no-verify"`
-	Mount string `cli:"-m, --mount"`
-} {
-	Bind: ":8080",
+	Help       bool   `cli:"-h, --help"`
+	Version    bool   `cli:"-v, --version"`
+	Bind       string `cli:"-b, --bind"`
+	Consul     string `cli:"-c, --consul"`
+	CACert     string `cli:"-C, --ca-certificate, --ca-cert"`
+	SkipVerify bool   `cli:"-N, --no-verify"`
+	Mount      string `cli:"-m, --mount"`
+}{
+	Bind:   ":8080",
 	Consul: "https://127.0.0.1:8500",
-	Mount: "/strongbox",
+	Mount:  "/strongbox",
 }
 
 var Version = ""
