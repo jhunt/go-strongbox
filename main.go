@@ -145,7 +145,7 @@ func main() {
 		}
 
 		if n == 0 {
-			fmt.Fprintf(os.Stderr, "%s contains no certificates\n")
+			fmt.Fprintf(os.Stderr, "%s contains no certificates\n", options.CACert)
 			os.Exit(2)
 		}
 	}
