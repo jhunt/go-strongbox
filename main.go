@@ -1,14 +1,18 @@
 package main
 
 import (
+	"regexp"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"strings"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+
+	"github.com/jhunt/go-cli"
 )
 
 /* a single result, from /v1/health/service/vault */
@@ -66,102 +70,73 @@ func usage(prefix string, exit int) {
 	os.Exit(exit)
 }
 
+var options = struct {
+	Help bool `cli:"-h, --help"`
+	Version bool `cli:"-v, --version"`
+	Bind string `cli:"-b, --bind"`
+	Consul string `cli:"-c, --consul"`
+	CACert string `cli:"-C, --ca-certificate, --ca-cert"`
+	SkipVerify bool `cli:"-N, --no-verify"`
+	Mount string `cli:"-m, --mount"`
+} {
+	Bind: ":8080",
+	Consul: "https://127.0.0.1:8500",
+	Mount: "/strongbox",
+}
+
 var Version = ""
 
 func main() {
-	/* for now, bind *:8080 and connect to 127.0.0.1:8500 */
-	bind := ":8080"
-	consul := "https://127.0.0.1:8500"
-	cacertfile := ""
-	verifytls := true
-	mount := "/strongbox"
-
-	args := os.Args[1:]
-	for len(args) > 0 {
-		if args[0] == "-h" || args[0] == "--bind" || args[0] == "help" {
-			usage("", 0)
+	command, args, err := cli.Parse(&options)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "!!! %s\n", err)
+		os.Exit(1)
+	}
+	if len(args) != 0 {
+		usage(fmt.Sprintf("!!! extra arguments found: %s", strings.Join(args, " ")), 1)
+	}
+	if options.Help || command == "help" {
+		usage("", 0)
+	}
+	if options.Version || command == "version" {
+		if Version == "" {
+			fmt.Printf("strongbox (development)\n")
+		} else {
+			fmt.Printf("strongbox v%s\n", Version)
 		}
-
-		if args[0] == "-v" || args[0] == "--version" || args[0] == "version" {
-			if Version == "" {
-				fmt.Printf("strongbox (development)\n")
-			} else {
-				fmt.Printf("strongbox v%s\n", Version)
-			}
-			os.Exit(0)
-		}
-
-		if args[0] == "-b" || args[0] == "--bind" {
-			if len(args) < 2 || args[1] == "" {
-				usage("Missing required value for --bind argument", 1)
-			}
-
-			bind = args[1]
-			args = args[2:]
-			continue
-		}
-
-		if args[0] == "-c" || args[0] == "--consul" {
-			if len(args) < 2 || args[1] == "" {
-				usage("Missing required value for --consul argument", 1)
-			}
-
-			consul = args[1]
-			args = args[2:]
-			continue
-		}
-
-		if args[0] == "-C" || args[0] == "--ca-cert" || args[0] == "--ca-certificate" {
-			if len(args) < 2 || args[1] == "" {
-				usage("Missing required value for --ca-certificate argument", 1)
-			}
-
-			cacertfile = args[1]
-			args = args[2:]
-			continue
-		}
-
-		if args[0] == "-N" || args[0] == "--no-verify" {
-			verifytls = false
-			args = args[1:]
-			continue
-		}
-
-		if args[0] == "-m" || args[0] == "--mount" {
-			if len(args) < 2 || args[1] == "" {
-				usage("Missing required value for --mount argument", 1)
-			}
-
-			mount = args[1]
-			args = args[2:]
-			continue
-		}
-
-		usage(fmt.Sprintf("Unrecognized command-line flag or argument, '%s'", args[0]), 1)
+		os.Exit(0)
 	}
 
 	rootCAs := x509.NewCertPool()
-	if cacertfile == "" {
+	if options.CACert == "" {
 		rootCAs = nil
 
 	} else {
 		n := 0
-		raw, err := ioutil.ReadFile(cacertfile)
+		raw, err := ioutil.ReadFile(options.CACert)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", cacertfile, err)
+			fmt.Fprintf(os.Stderr, "%s: %s\n", options.CACert, err)
 			os.Exit(2)
 		}
 
+		ws := regexp.MustCompile(`^[[:space:]]+`)
 		for len(raw) > 0 {
 			var b *pem.Block
 			b, raw = pem.Decode(raw)
+			raw = ws.ReplaceAllLiteral(raw, nil)
+			if b == nil {
+				fmt.Fprintf(os.Stderr, "%s[%d]: does not look like a PEM-encoded block/file\n",
+					options.CACert, n)
+				os.Exit(2)
+			}
 			if b.Type != "CERTIFICATE" {
+				fmt.Fprintf(os.Stderr, "found non certificate %v\n", b)
 				continue
 			}
 
 			ca, err := x509.ParseCertificate(b.Bytes)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "%s[%d]: %s\n", cacertfile, n, err)
+				fmt.Fprintf(os.Stderr, "%s[%d]: %s\n", options.CACert, n, err)
 				os.Exit(2)
 			}
 
@@ -178,25 +153,25 @@ func main() {
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: !verifytls,
+				InsecureSkipVerify: options.SkipVerify,
 				RootCAs:            rootCAs,
 			},
 		},
 	}
 
-	http.HandleFunc(mount, func(w http.ResponseWriter, req *http.Request) {
+	http.HandleFunc(options.Mount, func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != "GET" {
 			w.WriteHeader(400)
 			return
 		}
 
-		if req.URL.Path != mount {
+		if req.URL.Path != options.Mount {
 			w.WriteHeader(404)
 			fmt.Fprintf(w, "%s not found\n", req.URL.Path)
 			return
 		}
 
-		question, err := http.NewRequest("GET", fmt.Sprintf("%s/v1/health/service/vault", consul), nil)
+		question, err := http.NewRequest("GET", fmt.Sprintf("%s/v1/health/service/vault", options.Consul), nil)
 		if err != nil {
 			bail(w, err)
 			return
@@ -256,5 +231,7 @@ func main() {
 		w.Write(b)
 	})
 
-	http.ListenAndServe(bind, nil)
+	fmt.Printf("binding %s for inbound requests to %s\n", options.Bind, options.Mount)
+	fmt.Printf("(talking to consul at %s)\n", options.Consul)
+	http.ListenAndServe(options.Bind, nil)
 }
