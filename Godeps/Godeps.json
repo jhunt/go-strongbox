@@ -1,0 +1,15 @@
+{
+	"ImportPath": "github.com/jhunt/go-strongbox",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v79",
+	"Deps": [
+		{
+			"ImportPath": "github.com/jhunt/go-cli",
+			"Rev": "d74b1b6905297834d014b95038b9a58539832140"
+		},
+		{
+			"ImportPath": "github.com/jhunt/go-snapshot",
+			"Rev": "92984e0ad8d83220d55e97554c5ec8d41d8edc18"
+		}
+	]
+}
