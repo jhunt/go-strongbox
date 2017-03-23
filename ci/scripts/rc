@@ -14,6 +14,12 @@
 ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
 cd $ROOT
 
+if [[ $(git log -1 --format=%aE) = "ci@starkandwayne.com" ]]; then
+	echo "Skipping Release Notes check; commit was from CI Bot:"
+	git --no-pager log -1
+	exit 0
+fi
+
 if [[ ! -s ci/release_notes.md ]]; then
 	cat <<EOF
 
@@ -35,4 +41,8 @@ EOF
 fi
 
 echo "Release Notes present and accounted for..."
+echo ; echo
+echo "------------------------------------------------"
+cat ci/release_notes.md
+echo "------------------------------------------------"
 exit 0

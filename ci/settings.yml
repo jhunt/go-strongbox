@@ -6,6 +6,9 @@ meta:
 
   initial_version: 0.0.1
 
+  go:
+    binary: strongbox
+
   aws:
     access_key: (( vault "secret/aws/cfcommunity:access" ))
     secret_key: (( vault "secret/aws/cfcommunity:secret" ))
