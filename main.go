@@ -51,6 +51,8 @@ func usage(prefix string, exit int) {
 	fmt.Fprintf(os.Stderr, "USAGE: strongbox [options]\n")
 	fmt.Fprintf(os.Stderr, "\n")
 	fmt.Fprintf(os.Stderr, "OPTIONS\n")
+	fmt.Fprintf(os.Stderr, "  -D, --debug            Print (useful) debugging messges to stderr.\n")
+	fmt.Fprintf(os.Stderr, "\n")
 	fmt.Fprintf(os.Stderr, "  -b, --bind             IP address and port to bind on.\n")
 	fmt.Fprintf(os.Stderr, "                         Omit the address to bind all interfaces.\n")
 	fmt.Fprintf(os.Stderr, "                         Defaults to ':8080'\n")
@@ -78,6 +80,7 @@ var options = struct {
 	CACert     string `cli:"-C, --ca-certificate, --ca-cert"`
 	SkipVerify bool   `cli:"-N, --no-verify"`
 	Mount      string `cli:"-m, --mount"`
+	Debug      bool   `cli:"-D, --debug"`
 }{
 	Bind:   ":8080",
 	Consul: "https://127.0.0.1:8500",
@@ -160,12 +163,22 @@ func main() {
 	}
 
 	http.HandleFunc(options.Mount, func(w http.ResponseWriter, req *http.Request) {
+		if options.Debug {
+			fmt.Fprintf(os.Stderr, "DEBUG> inbound request for [%s %s]\n", req.Method, req.URL)
+		}
+
 		if req.Method != "GET" {
+			if options.Debug {
+				fmt.Fprintf(os.Stderr, "DEBUG> replying with HTTP 400 (not a GET request)\n")
+			}
 			w.WriteHeader(400)
 			return
 		}
 
 		if req.URL.Path != options.Mount {
+			if options.Debug {
+				fmt.Fprintf(os.Stderr, "DEBUG> replying with HTTP 404 (not a GET request to %s)\n", options.Mount)
+			}
 			w.WriteHeader(404)
 			fmt.Fprintf(w, "%s not found\n", req.URL.Path)
 			return
@@ -173,16 +186,28 @@ func main() {
 
 		question, err := http.NewRequest("GET", fmt.Sprintf("%s/v1/health/service/vault", options.Consul), nil)
 		if err != nil {
+			if options.Debug {
+				fmt.Fprintf(os.Stderr, "DEBUG> failed (internally) to craft a GET request to consul: %s\n", err)
+			}
 			bail(w, err)
 			return
+		}
+		if options.Debug {
+			fmt.Fprintf(os.Stderr, "DEBUG> querying consul via [GET %s]\n", question.URL)
 		}
 
 		answer, err := client.Do(question)
 		if err != nil {
+			if options.Debug {
+				fmt.Fprintf(os.Stderr, "DEBUG> failed (internally) to submit GET request to consul: %s\n", err)
+			}
 			bail(w, err)
 			return
 		}
 
+		if options.Debug {
+			fmt.Fprintf(os.Stderr, "DEBUG> received [%s] response to our consul query\n", answer.Status)
+		}
 		if answer.StatusCode != 200 {
 			bail(w, fmt.Errorf("backend service discovery failure"))
 			return
@@ -190,8 +215,17 @@ func main() {
 
 		b, err := ioutil.ReadAll(answer.Body)
 		if err != nil {
+			if options.Debug {
+				fmt.Fprintf(os.Stderr, "DEBUG> failed (internally) to read the response from consul: %s\n", err)
+			}
 			bail(w, err)
 			return
+		}
+		if options.Debug {
+			fmt.Fprintf(os.Stderr, "DEBUG> received %d bytes from consul:\n", len(b))
+			fmt.Fprintf(os.Stderr, "=====================================\n")
+			fmt.Fprintf(os.Stderr, "%s\n", string(b))
+			fmt.Fprintf(os.Stderr, "=====================================\n")
 		}
 
 		var rr []Result
@@ -204,12 +238,23 @@ func main() {
 		stat := make(map[string]string)
 		for _, r := range rr {
 			if r.Service.Service != "vault" {
+				if options.Debug {
+					fmt.Fprintf(os.Stderr, "DEBUG> skipping consul-reported service '%s'\n", r.Service.Service)
+				}
 				continue
+			}
+
+			k := fmt.Sprintf("https://%s:%d", r.Service.Address, r.Service.Port)
+			if options.Debug {
+				fmt.Fprintf(os.Stderr, "DEBUG> inspecting consul-reported service '%s' (for %s)\n", r.Service.Service, k)
 			}
 
 			for _, c := range r.Checks {
 				if c.ServiceName == "vault" {
-					k := fmt.Sprintf("https://%s:%d", r.Service.Address, r.Service.Port)
+					if options.Debug {
+						fmt.Fprintf(os.Stderr, "DEBUG> inspecting consul-reported service '%s' (for %s) check '%s'; status = '%s'\n", r.Service.Service, k, c.ServiceName, c.Status)
+					}
+
 					if c.Status == "passing" {
 						stat[k] = "unsealed"
 					} else {
@@ -222,8 +267,18 @@ func main() {
 
 		b, err = json.Marshal(stat)
 		if err != nil {
+			if options.Debug {
+				fmt.Fprintf(os.Stderr, "DEBUG> failed (internally) to marshal our response to json: %s\n", err)
+			}
 			bail(w, err)
 			return
+		}
+
+		if options.Debug {
+			fmt.Fprintf(os.Stderr, "DEBUG> sending %d bytes to client:\n", len(b))
+			fmt.Fprintf(os.Stderr, "==================================\n")
+			fmt.Fprintf(os.Stderr, "%s\n", string(b))
+			fmt.Fprintf(os.Stderr, "==================================\n")
 		}
 
 		w.WriteHeader(200)
