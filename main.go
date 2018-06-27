@@ -235,6 +235,7 @@ func main() {
 			return
 		}
 
+		corrupt := false
 		stat := make(map[string]string)
 		for _, r := range rr {
 			if r.Service.Service != "vault" {
@@ -255,6 +256,11 @@ func main() {
 						fmt.Fprintf(os.Stderr, "DEBUG> inspecting consul-reported service '%s' (for %s) check '%s'; status = '%s'\n", r.Service.Service, k, c.ServiceName, c.Status)
 					}
 
+					if _, ok := stat[k]; ok {
+						fmt.Fprintf(os.Stderr, "ERROR! duplicate 'vault' service record found in consul for %s!\n", k)
+						corrupt = true
+					}
+
 					if c.Status == "passing" {
 						stat[k] = "unsealed"
 					} else {
@@ -263,6 +269,11 @@ func main() {
 					break
 				}
 			}
+		}
+
+		if corrupt {
+			bail(w, fmt.Errorf("backend data corruption detected"))
+			return
 		}
 
 		b, err = json.Marshal(stat)
